@@ -1,0 +1,246 @@
+-- Example datasets 
+-- 1 sales 
+-- 2 menu
+-- 3 members
+-- schema : dannys_diner 
+
+-- Table-1
+-- Sales 
+-- 3 columns : customer_id, order_date, product_id
+
+-- Table-2 
+-- menu 
+-- 3 columns : product_id, product_name, price 
+
+-- Table- 3 
+-- members
+-- 2 columns : customer_id, join_date 
+
+
+
+-- Case Study Questions 
+-- 1 What is the total amount each customer spent at the restaurant?
+SELECT 
+  customer_id,
+  SUM(t2.price) AS amt_spent_each_customer
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id
+GROUP BY customer_id
+ORDER BY amt_spent_each_customer DESC;
+
+-- 2 How many days has each customer visited the restaurant?
+SELECT 
+  customer_id,
+  COUNT(DISTINCT order_date) AS customer_day_count
+FROM dannys_diner.sales
+GROUP BY customer_id
+ORDER BY customer_day_count DESC;
+
+-- 3 What was the first item from the menu purchased by each customer?
+WITH ordered_sales AS (
+SELECT 
+  customer_id,
+  RANK() OVER (
+    PARTITION BY customer_id
+    ORDER BY order_date
+  ) AS order_rank,
+  product_name
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id
+)
+SELECT  DISTINCT 
+  customer_id,
+  product_name
+FROM ordered_sales
+WHERE order_rank = 1;
+
+-- 4 What is the most purchased item on the menu and how many times was it purchased by all customers?
+SELECT 
+  product_name,
+  COUNT(*) AS item_count
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id 
+GROUP BY product_name 
+ORDER BY item_count DESC
+LIMIT 1;
+
+-- 5 Which item was the most popular for each customer?
+SELECT DISTINCT
+  product_name,
+  customer_id,
+  COUNT(*) AS item_count
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id 
+GROUP BY product_name, customer_id
+ORDER BY item_count DESC;
+
+-- 6 Which item was purchased first by the customer after they became a member?
+WITH member_sales_cte AS (
+SELECT
+  t1.customer_id,
+  t1.order_date,
+  t2.product_name,
+  RANK () OVER (
+    PARTITION BY join_date 
+    ORDER BY order_date
+  ) AS item_rank
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id
+INNER JOIN dannys_diner.members AS t3 
+  ON t1.customer_id = t3.customer_id
+WHERE 
+  order_date >= join_date
+)
+SELECT DISTINCT 
+  customer_id,
+  product_name,
+  order_date
+FROM member_sales_cte
+WHERE item_rank = 1 ;
+
+-- 7 Which item was purchased just before the customer became a member?
+WITH member_sales_cte AS (
+SELECT
+  t1.customer_id,
+  t1.order_date,
+  t2.product_name,
+  RANK () OVER (
+    PARTITION BY join_date 
+    ORDER BY order_date
+  ) AS item_rank
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id
+INNER JOIN dannys_diner.members AS t3 
+  ON t1.customer_id = t3.customer_id
+WHERE 
+  order_date < join_date
+)
+SELECT DISTINCT 
+  customer_id,
+  product_name,
+  order_date
+FROM member_sales_cte
+WHERE item_rank = 1 ;
+
+-- 8 What is the total items and amount spent for each member before they became a member?
+SELECT 
+  t1.customer_id,
+  COUNT(t2.product_id) AS item_count,
+  SUM(t2.price) AS amount_spent
+FROM dannys_diner.sales AS t1 
+INNER JOIN dannys_diner.menu AS t2 
+  ON t1.product_id = t2.product_id
+INNER JOIN dannys_diner.members AS t3 
+  ON t1.customer_id = t3.customer_id
+WHERE order_date < join_date:: DATE 
+GROUP BY t1.customer_id;
+
+-- 9 If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+SELECT 
+  sales.customer_id,
+  SUM(
+    CASE 
+      WHEN menu.product_name = 'sushi' THEN 2 * 10 * menu.price 
+      ELSE 10 * menu.price 
+      END 
+  ) AS customer_points
+FROM dannys_diner.sales
+INNER JOIN dannys_diner.menu 
+  ON sales.product_id = menu.product_id 
+GROUP BY sales.customer_id
+ORDER BY customer_points DESC;
+
+
+-- 10 In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
+SELECT
+  sales.customer_id,
+  SUM (
+    CASE
+      WHEN menu.product_name = 'sushi' THEN 2 * 10 * menu.price
+      WHEN sales.order_date BETWEEN (members.join_date::DATE) AND (members.join_date::DATE + 6) THEN 2 * 10 * menu.price
+      ELSE 10 * menu.price 
+      END 
+  ) AS points
+FROM dannys_diner.sales
+INNER JOIN dannys_diner.menu
+  ON sales.product_id = menu.product_id
+INNER JOIN dannys_diner.members
+  ON sales.customer_id = members.customer_id
+-- does this look right?
+WHERE members.join_date <= '2021-01-31'::DATE
+GROUP BY sales.customer_id
+ORDER BY points DESC;
+
+
+-- BONUS QUESTIONS 
+-- 11 
+DROP TABLE IF EXISTS diner_data_asset;
+CREATE TEMP TABLE diner_data_asset AS  
+(
+SELECT 
+  sales.customer_id,
+  sales.order_date,
+  menu.product_name,
+  menu.price,
+  CASE 
+    WHEN sales.order_date > members.join_date::DATE THEN 'Y'
+    ELSE 'N' 
+    END AS vip_member 
+FROM dannys_diner.sales
+INNER JOIN dannys_diner.menu
+  ON sales.product_id = menu.product_id
+INNER JOIN dannys_diner.members
+  ON sales.customer_id = members.customer_id
+GROUP BY 
+  sales.customer_id,
+  sales.order_date,
+  menu.product_name,
+  menu.price,
+  members.join_date
+ORDER BY 
+  sales.customer_id,
+  sales.order_date
+);
+SELECT * 
+FROM diner_data_asset;
+-- 12 
+WITH joint_sales AS (
+SELECT
+  sales.customer_id,
+  sales.order_date,
+  menu.product_name,
+  menu.price,
+  CASE
+    WHEN sales.order_date > members.join_date::DATE THEN 'Y'
+    ELSE 'N'
+    END AS member
+FROM dannys_diner.sales
+INNER JOIN dannys_diner.menu
+  ON sales.product_id = menu.product_id
+INNER JOIN dannys_diner.members
+  ON sales.customer_id = members.customer_id
+)
+SELECT
+  sales.customer_id,
+  sales.order_date,
+  menu.product_name,
+  menu.price
+  member,
+  -- check this logic very carefully!
+  -- are we missing anything???
+  CASE
+    WHEN sales.order_date < members.join_date THEN NULL 
+    ELSE RANK() OVER (
+      PARTITION BY sales.customer_id, member
+      ORDER BY sales.order_date
+    ) 
+    END AS ranking
+FROM joint_sales
+WHERE ranking <= 3
+GROUP BY customer_id;
