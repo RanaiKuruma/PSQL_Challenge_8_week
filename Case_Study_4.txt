@@ -151,10 +151,3 @@ SELECT
 FROM data_bank.customer_transactions
 GROUP BY month
 ORDER BY month;
-
---5 Comparing the closing balance of a customer’s first month and the closing balance from their second nth, what percentage of customers:
--- Have a negative first month balance?
--- Have a positive first month balance?
--- Increase their opening month’s positive closing balance by more than 5% in the following month?
--- Reduce their opening month’s positive closing balance by more than 5% in the following month?
--- Move from a positive balance in the first month to a negative balance in the second month?
