@@ -1,0 +1,297 @@
+--Data Mart 
+Schema: data_mart 
+Tables : 
+    weekly_sales 
+
+-- A. Data Cleansing Steps
+
+DROP TABLE IF EXISTS data_mart.clean_weekly_sales;
+CREATE TABLE data_mart.clean_weekly_sales AS (
+SELECT 
+  -- The TO_DATE () converts strings into dates 
+  TO_DATE(week_date, 'YY/MM/DD') AS week_date,
+  DATE_PART('week', TO_DATE(week_date, 'DD/MM/YY)) AS week_number,
+  DATE_PART('month', TO_DATE(week_date, 'DD/MM/YY)) AS month_number,
+  DATE_PART('year', TO_DATE(week_date, 'DD/MM/YY)) AS calendar_year,
+  region,
+  platform,
+  CASE WHEN segment = 'null' THEN 'Unknown' ELSE segment END AS segment,
+  -- The PostgreSQL right() function is used to extract n number of characters specified in the argument from the right of a given string. When the value of n is negative, the extraction will happen from the right except for first n characters.
+  CASE 
+    WHEN RIGHT(segment, 1) = '1' THEN 'Young Adults'
+    WHEN RIGHT(segment, 1) = '2' THEN 'Middle Aged'
+    WHEN RIGHT(segment, 1) IN ('3', '4') THEN 'Retirees'
+    ELSE 'Unknown'
+    END AS age_band,
+  -- The PostgreSQL left() function is used to extract n number of characters specified in the argument from the left of a given string. When the value of n is negative, the extraction will happen from left except last n characters.
+  CASE 
+    WHEN LEFT(segment, 1) = 'C' THEN 'Couples'
+    WHEN LEFT(segment, 1) = 'F' THEN 'Families'
+    ELSE 'Unkown'
+    END AS demographic,
+  customer_type,
+  transactions,
+  sales,
+  ROUND(AVG(sales::NUMERIC / transactions), 2) AS avg_transactions
+FROM data_mart.weekly_sales
+GROUP BY 
+  week_date,
+  week_number,
+  month_number,
+  calendar_year,
+  region,
+  platform,
+  segment,
+  customer_type,
+  transactions,
+  sales
+);
+
+
+-- B. Data Exploration
+
+--1 What day of the week is used for each week_date value?
+SELECT 
+  -- The PostgreSQL TO_CHAR() function converts a timestamp, an interval, an integer, a double precision, or a numeric value to a string
+  DISTINCT(TO_CHAR(week_date, 'day')) AS week_day
+FROM data_mart.clean_weekly_sales;
+
+-- Later 
+--2 What range of week numbers are missing from the dataset?
+WITH missing_week_cte AS (
+SELECT 
+  GENERATE_SERIES(1,52) AS week_number
+)
+SELECT 
+  -- DISTINCT(t1.week_number) AS week_number
+  t1.week_number
+FROM missing_week_cte AS t1 
+WHERE EXISTS (
+  SELECT t2.week_number 
+  FROM data_mart.clean_weekly_sales AS t2 
+  WHERE 
+    t1.week_number = t2.week_number
+    AND t2.week_number IS NULL
+);
+
+--3 How many total transactions were there for each year in the dataset?
+SELECT 
+  calendar_year,
+  SUM(transactions) as total_transactions
+FROM data_mart.clean_weekly_sales
+GROUP BY calendar_year 
+ORDER BY calendar_year;
+
+--4 What is the total sales for each region for each month?
+SELECT 
+  month_number,
+  region,
+  SUM(sales) AS total_sales
+FROM data_mart.clean_weekly_sales
+GROUP BY 
+  region,
+  month_number
+ORDER BY 
+  region,
+  month_number;
+  
+--5 What is the total count of transactions for each platform ? 
+SELECT 
+  platform,
+  SUM(transactions) AS total_transactions
+FROM data_mart.clean_weekly_sales
+GROUP BY platform
+ORDER BY platform;
+
+--6 What is the percentage of sales for Retail vs Shopify for each month?
+-- again 
+WITH sales_cte AS (
+SELECT 
+  month_number,
+  platform,
+  SUM(sales) AS monthly_sales
+FROM data_mart.clean_weekly_sales
+GROUP BY 
+  month_number,
+  platform
+)
+SELECT 
+  month_number,
+  ROUND(
+    100 * MAX(CASE WHEN platform = 'Retail' THEN monthly_sales ELSE NULL END) / SUM(monthly_sales)
+    ,
+    2
+  ) AS retail_percentage,
+  ROUND(
+    100 * MAX(CASE WHEN platform = 'Shopify' THEN monthly_sales ELSE NULL END) / SUM(monthly_sales)
+    ,
+    2
+  ) AS shopify_percentage
+FROM sales_cte
+GROUP BY month_number
+ORDER BY month_number;
+
+
+-- Later 
+--7 What is the percentage of sales by demographic for each year in the dataset?
+-- SELECT calendar_year,
+-- 	calendar_year,
+-- 	demographic,
+-- 	ROUND (
+-- 	  100 * SUM(sales)::NUMERIC / SUM(SUM(sales)) OVER (PARTITION BY demographic),
+-- 	  2
+-- 	 ) AS percentage
+-- FROM data_mart.clean_weekly_sales
+-- GROUP BY 
+-- 	calendar_year,
+--   demographic
+-- ORDER BY 
+--   calendar_year,
+-- 	demographic;
+	
+--8 Which age_band and demographic values contribute the most to Retail sales?
+SELECT DISTINCT 
+  age_band,
+  demographic,
+  SUM(sales) AS retail_sales
+FROM data_mart.clean_weekly_sales
+WHERE platform = 'Retail'
+  AND age_band != 'Unknown' 
+  AND demographic != 'Unknown'
+GROUP BY 
+  age_band,
+  demographic
+ORDER BY 
+  retail_sales DESC;
+
+--9 Can we use the avg_transaction column to find the average transaction size for each year for Retail vs Shopify? If not - how would you calculate it instead?
+-- Average of Averages will give wrong denominator (we will get misleading insights) so to avoid this just add the sum and divide the sum of transactions to get the average transaction size 
+SELECT  
+  DISTINCT(calendar_year),
+  platform,
+  ROUND(AVG(avg_transactions),2) AS avg_avg_transactions,
+  SUM(sales) / SUM(transactions) AS avg_transaction_size 
+FROM data_mart.clean_weekly_sales
+GROUP BY 
+  calendar_year,
+  platform
+ORDER BY 
+  calendar_year,
+  platform;
+
+
+--C. Before & After Analysis
+
+--1 What is the total sales for the 4 weeks before and after 2020-06-15? What is the growth or reduction rate in actual values and percentage of sales?
+WITH total_sales_cte AS (
+SELECT 
+  week_date,
+  week_number,
+  SUM(sales) AS total_sales
+FROM clean_weekly_sales
+WHERE (week_number BETWEEN 21 AND 28)
+  AND (calendar_year = '2020')
+GROUP BY 
+  week_date,
+  week_number
+),
+weekly_sales_cte AS (
+SELECT 
+  SUM(CASE WHEN week_number BETWEEN 21 AND 24 THEN total_sales END) AS old_sales,
+  SUM(CASE WHEN week_number BETWEEN 25 AND 28 THEN total_sales END) AS new_sales
+FROM total_sales_cte
+)
+SELECT 
+  old_sales,
+  new_sales,
+  ROUND(100 * ((new_sales - old_sales) / old_sales) , 2) AS percentage
+FROM weekly_sales_cte;
+
+--2 What about the entire 12 weeks before and after?
+WITH total_sales_cte AS (
+SELECT 
+  week_date,
+  week_number,
+  SUM(sales) AS total_sales
+FROM data_mart.clean_weekly_sales
+WHERE week_number BETWEEN 13 AND 37
+  AND calendar_year = '2020'
+GROUP BY 
+  week_date,
+  week_number
+),
+weekly_sales_cte AS (
+SELECT 
+  SUM(CASE WHEN week_number BETWEEN 13 AND 24 THEN total_sales END) AS old_sales,
+  SUM(CASE WHEN week_number BETWEEN 25 AND 37 THEN total_sales END) AS new_sales
+FROM total_sales_cte
+)
+SELECT 
+  old_sales,
+  new_sales,
+  new_sales - old_sales AS sales_difference,
+  ROUND(100 * (new_sales - old_sales) / old_sales, 2) AS percentage
+FROM weekly_sales_cte;
+
+--3 How do the sale metrics for these 2 periods before and after compare with the previous years in 2018 and 2019?
+
+-- 12 weeks before and after '2020-06-15' (baseline value)
+WITH yearly_total_sales AS (
+SELECT 
+  calendar_year,
+  week_number,
+  SUM(sales) AS total_sales
+FROM data_mart.clean_weekly_sales
+WHERE 
+  (week_number BETWEEN 13 AND 37)
+GROUP BY 
+  calendar_year,
+  week_number
+),
+changes AS (
+SELECT 
+  calendar_year,
+  SUM(CASE WHEN week_number BETWEEN 13 AND 24 THEN total_sales END) AS old_yearly_sales,
+  SUM(CASE WHEN week_number BETWEEN 25 AND 37 THEN total_sales END) AS new_yearly_sales
+FROM yearly_total_sales
+GROUP BY 
+  calendar_year
+)
+
+SELECT 
+  calendar_year,
+  old_yearly_sales,
+  new_yearly_sales,
+  ROUND(100 * (new_yearly_sales - old_yearly_sales) / old_yearly_sales, 2) AS percentage
+FROM changes;
+
+-- 4 weeks before and after '2020-06-15' (baseline value)
+WITH yearly_total_sales AS (
+SELECT 
+  calendar_year,
+  week_number,
+  SUM(sales) AS total_sales
+FROM data_mart.clean_weekly_sales
+WHERE 
+  (week_number BETWEEN 21 AND 28)
+GROUP BY 
+  calendar_year,
+  week_number
+),
+changes AS (
+SELECT 
+  calendar_year,
+  SUM(CASE WHEN week_number BETWEEN 21 AND 24 THEN total_sales END) AS old_yearly_sales,
+  SUM(CASE WHEN week_number BETWEEN 25 AND 28 THEN total_sales END) AS new_yearly_sales
+FROM yearly_total_sales
+GROUP BY 
+  calendar_year
+)
+
+SELECT 
+  calendar_year,
+  old_yearly_sales,
+  new_yearly_sales,
+  new_yearly_sales - old_yearly_sales AS sales_difference,
+  ROUND(100 * (new_yearly_sales - old_yearly_sales) / old_yearly_sales, 2) AS percentage
+FROM changes;
