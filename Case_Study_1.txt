@@ -209,37 +209,41 @@ ORDER BY
 SELECT * 
 FROM diner_data_asset;
 -- 12 
-WITH joint_sales AS (
-SELECT
+DROP TABLE IF EXISTS diner_data_asset;
+CREATE TEMP TABLE diner_data_asset AS  
+(
+SELECT 
   sales.customer_id,
   sales.order_date,
   menu.product_name,
   menu.price,
-  CASE
-    WHEN sales.order_date > members.join_date::DATE THEN 'Y'
+  CASE 
+    WHEN sales.order_date >= members.join_date::DATE THEN 'Y'
     ELSE 'N'
-    END AS member
+    END AS member 
 FROM dannys_diner.sales
-INNER JOIN dannys_diner.menu
-  ON sales.product_id = menu.product_id
 INNER JOIN dannys_diner.members
   ON sales.customer_id = members.customer_id
-)
-SELECT
+INNER JOIN dannys_diner.menu
+  ON sales.product_id = menu.product_id
+GROUP BY 
   sales.customer_id,
   sales.order_date,
   menu.product_name,
-  menu.price
-  member,
-  -- check this logic very carefully!
-  -- are we missing anything???
-  CASE
-    WHEN sales.order_date < members.join_date THEN NULL 
-    ELSE RANK() OVER (
-      PARTITION BY sales.customer_id, member
-      ORDER BY sales.order_date
-    ) 
-    END AS ranking
-FROM joint_sales
-WHERE ranking <= 3
-GROUP BY customer_id;
+  menu.price,
+  members.join_date
+ORDER BY 
+  sales.customer_id,
+  sales.order_date
+);
+SELECT 
+customer_id,
+order_date,
+product_name,
+price,
+member,
+CASE 
+  WHEN member ='Y' THEN RANK() OVER(PARTITION BY customer_id, member ORDER BY order_date)
+  ELSE NULL 
+  END AS ranking
+FROM diner_data_asset;
