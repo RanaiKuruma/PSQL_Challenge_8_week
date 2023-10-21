@@ -6,47 +6,37 @@ Tables :
 -- A. Data Cleansing Steps
 
 DROP TABLE IF EXISTS data_mart.clean_weekly_sales;
-CREATE TABLE data_mart.clean_weekly_sales AS (
-SELECT 
-  -- The TO_DATE () converts strings into dates 
+CREATE TABLE data_mart.clean_weekly_sales AS
+SELECT
   TO_DATE(week_date, 'YY/MM/DD') AS week_date,
-  DATE_PART('week', TO_DATE(week_date, 'DD/MM/YY)) AS week_number,
-  DATE_PART('month', TO_DATE(week_date, 'DD/MM/YY)) AS month_number,
-  DATE_PART('year', TO_DATE(week_date, 'DD/MM/YY)) AS calendar_year,
+  DATE_PART('week', TO_DATE(week_date, 'DD/MM/YY')) AS week_number,
+  DATE_PART('month', TO_DATE(week_date, 'DD/MM/YY')) AS month_number,
+  DATE_PART('year', TO_DATE(week_date, 'DD/MM/YY')) AS calendar_year,
   region,
   platform,
-  CASE WHEN segment = 'null' THEN 'Unknown' ELSE segment END AS segment,
-  -- The PostgreSQL right() function is used to extract n number of characters specified in the argument from the right of a given string. When the value of n is negative, the extraction will happen from the right except for first n characters.
-  CASE 
+  CASE
+    WHEN segment = 'null' THEN 'Unknown'
+    ELSE segment
+    END AS segment,
+  CASE
     WHEN RIGHT(segment, 1) = '1' THEN 'Young Adults'
     WHEN RIGHT(segment, 1) = '2' THEN 'Middle Aged'
     WHEN RIGHT(segment, 1) IN ('3', '4') THEN 'Retirees'
     ELSE 'Unknown'
     END AS age_band,
-  -- The PostgreSQL left() function is used to extract n number of characters specified in the argument from the left of a given string. When the value of n is negative, the extraction will happen from left except last n characters.
-  CASE 
+  CASE
     WHEN LEFT(segment, 1) = 'C' THEN 'Couples'
     WHEN LEFT(segment, 1) = 'F' THEN 'Families'
-    ELSE 'Unkown'
+    ELSE 'Unknown'
     END AS demographic,
   customer_type,
   transactions,
   sales,
-  ROUND(AVG(sales::NUMERIC / transactions), 2) AS avg_transactions
-FROM data_mart.weekly_sales
-GROUP BY 
-  week_date,
-  week_number,
-  month_number,
-  calendar_year,
-  region,
-  platform,
-  segment,
-  customer_type,
-  transactions,
-  sales
-);
-
+  ROUND(
+      sales / transactions,
+      2
+   ) AS avg_transaction
+FROM data_mart.weekly_sales;
 
 -- B. Data Exploration
 
