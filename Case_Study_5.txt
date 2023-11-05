@@ -41,10 +41,11 @@ FROM data_mart.weekly_sales;
 -- B. Data Exploration
 
 --1 What day of the week is used for each week_date value?
-SELECT 
-  -- The PostgreSQL TO_CHAR() function converts a timestamp, an interval, an integer, a double precision, or a numeric value to a string
-  DISTINCT(TO_CHAR(week_date, 'day')) AS week_day
-FROM data_mart.clean_weekly_sales;
+-- The PostgreSQL TO_CHAR() function converts a timestamp, an interval, an integer, a double precision, or a numeric value to a string
+SELECT DISTINCT
+  TO_CHAR(week_date, 'Day') AS day 
+FROM data_mart.clean_weekly_sales
+LIMIT 1;
 
 -- Later 
 --2 What range of week numbers are missing from the dataset?
