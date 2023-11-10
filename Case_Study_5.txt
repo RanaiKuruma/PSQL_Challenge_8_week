@@ -125,20 +125,24 @@ ORDER BY month_number;
 
 -- Later 
 --7 What is the percentage of sales by demographic for each year in the dataset?
--- SELECT calendar_year,
--- 	calendar_year,
--- 	demographic,
--- 	ROUND (
--- 	  100 * SUM(sales)::NUMERIC / SUM(SUM(sales)) OVER (PARTITION BY demographic),
--- 	  2
--- 	 ) AS percentage
--- FROM data_mart.clean_weekly_sales
--- GROUP BY 
--- 	calendar_year,
---   demographic
--- ORDER BY 
---   calendar_year,
--- 	demographic;
+SELECT
+  calendar_year,
+  demographic,
+  SUM(SALES) AS yearly_sales,
+  ROUND(
+    (
+      100 * SUM(sales)::NUMERIC /
+        SUM(SUM(SALES)) OVER (PARTITION BY demographic)
+    )::NUMERIC,
+    2
+  ) AS percentage
+FROM data_mart.clean_weekly_sales
+GROUP BY
+  calendar_year,
+  demographic
+ORDER BY
+  calendar_year,
+  demographic;
 	
 --8 Which age_band and demographic values contribute the most to Retail sales?
 SELECT DISTINCT 
