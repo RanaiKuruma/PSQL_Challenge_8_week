@@ -48,3 +48,27 @@ GROUP BY visit_id
 SELECT 
   ROUND(100 * SUM(purchase_flag) / COUNT(*), 2) AS percentage
 FROM purchase_flag;
+
+-- 7 What are the top 3 pages by number of views?
+SELECT 
+  page_hierarchy.page_name,
+  COUNT(*) AS page_views
+FROM clique_bait.events 
+INNER JOIN clique_bait.page_hierarchy
+  ON events.page_id = page_hierarchy.page_id
+WHERE events.event_type = 1 
+GROUP BY page_hierarchy.page_name
+ORDER BY page_views DESC
+LIMIT 3;
+
+-- 8 What is the number of views and cart adds for each product category?
+SELECT 
+  page_hierarchy.product_category,
+  SUM(CASE WHEN events.event_type = 1 THEN 1 ELSE 0 END) AS number_of_views,
+  SUM(CASE WHEN events.event_type = 2 THEN 1 ELSE 0 END) AS cart_adds
+FROM clique_bait.events
+INNER JOIN clique_bait.page_hierarchy
+  ON events.page_id = page_hierarchy.page_id
+WHERE page_hierarchy.product_category IS NOT NULL
+GROUP BY page_hierarchy.product_category
+ORDER BY number_of_views DESC;
