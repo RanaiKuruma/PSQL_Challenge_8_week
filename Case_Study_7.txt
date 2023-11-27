@@ -1,0 +1,19 @@
+--1 What was the total quantity sold for all products?
+SELECT 
+  product_details.product_name,
+  SUM(sales.qty) AS total_quantity
+FROM balanced_tree.product_details
+INNER JOIN balanced_tree.sales
+  ON product_details.product_id = sales.prod_id
+GROUP BY product_details.product_name 
+ORDER BY total_quantity DESC;
+
+--2 What is the total generated revenue for all products before discounts?
+SELECT 
+  TO_CHAR(SUM(price * qty), 'FM $ 999, 999, 999.99') AS total_revenue
+FROM balanced_tree.sales;
+
+--3 What was the total discount amount for all products?
+SELECT 
+  TO_CHAR(SUM(price * qty * (discount / 100::NUMERIC)), 'FM 999, 999, 999.99')
+FROM balanced_tree.sales;
