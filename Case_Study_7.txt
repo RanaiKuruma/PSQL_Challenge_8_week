@@ -19,3 +19,70 @@ FROM balanced_tree.sales;
 SELECT 
   TO_CHAR(SUM(price * qty * (discount / 100::NUMERIC)), 'FM 999, 999, 999.99')
 FROM balanced_tree.sales;
+
+-- B. Transaction Analysis
+--1 How many unique transactions were there?
+SELECT  
+  COUNT(DISTINCT txn_id) AS count_of_unique_transactions
+FROM balanced_tree.sales;
+
+--2 What is the average unique products purchased in each transaction?
+WITH transaction_product_cte AS (
+SELECT 
+  txn_id,
+  COUNT(DISTINCT prod_id) AS unique_products
+FROM balanced_tree.sales
+GROUP BY txn_id
+)
+SELECT 
+  ROUND(AVG(unique_products)) AS avg_unique_products
+FROM transaction_product_cte;
+
+--3 What are the 25th, 50th and 75th percentile values for the revenue per transaction?
+WITH revenue_per_transaction_cte AS (
+SELECT 
+  txn_id,
+  SUM(qty * price) AS revenue
+FROM balanced_tree.sales
+GROUP BY txn_id
+)
+SELECT 
+  PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY revenue) AS ptc_25,
+  PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY revenue) AS pct_50,
+  PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY revenue) AS pct_75
+FROM revenue_per_transaction_cte;
+
+--4 What is the average discount value per transaction?
+WITH discount_per_transaction AS (
+SELECT 
+  txn_id,
+  SUM(qty * price * (discount/100::NUMERIC)) AS discount_value
+FROM balanced_tree.sales
+GROUP BY txn_id
+)
+SELECT 
+  ROUND(AVG(discount_value), 2) AS avg_discount_value
+FROM discount_per_transaction;
+
+--5 What is the percentage split of all transactions for members vs non-members?
+SELECT 
+  ROUND(SUM(CASE WHEN member = 't' THEN 1 ELSE 0 END) / COUNT(*)::NUMERIC * 100) AS member_transaction_percentage,
+  ROUND(SUM(CASE WHEN member = 'f' THEN 1 ELSE 0 END) / COUNT(*)::NUMERIC * 100) AS non_member_transaction_percentage
+FROM balanced_tree.sales;
+
+--6 What is the average revenue for member transactions and non-member transactions?
+WITH revenue_cte AS (
+SELECT 
+  member,
+  txn_id,
+  SUM(qty * price) AS revenue
+FROM balanced_tree.sales
+GROUP BY 
+  member,
+  txn_id
+)
+SELECT 
+  member,
+  ROUND(AVG(revenue), 2) AS avg_revenue_member_transactions
+FROM revenue_cte
+GROUP BY member;
